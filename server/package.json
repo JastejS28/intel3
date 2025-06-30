@@ -1,0 +1,30 @@
+{
+  "name": "healthcare-kiosk-server",
+  "version": "1.0.0",
+  "description": "Server for Healthcare Kiosk with Patient Priority Queue System",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "healthcare",
+    "kiosk",
+    "server",
+    "priority",
+    "queue"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.4.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "mongoose": "^7.3.4",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

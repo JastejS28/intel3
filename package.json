@@ -1,0 +1,24 @@
+{
+  "name": "healthcare-kiosk",
+  "version": "1.0.0",
+  "description": "Healthcare Kiosk with Patient Priority Queue System",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run start",
+    "client": "cd client && npm start",
+    "install-all": "npm install && cd client && npm install && cd ../server && npm install"
+  },
+  "keywords": [
+    "healthcare",
+    "kiosk",
+    "intel",
+    "priority",
+    "queue"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

@@ -1,0 +1,183 @@
+body {
+  margin: 0;
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f5f5f5;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Custom styles */
+.page-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  position: relative;
+  background-color: #0078D4;
+  color: white;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.header-logo {
+  height: 28px;
+  margin-right: 10px;
+}
+
+.content {
+  flex: 1;
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.feature-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+}
+
+.feature-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #0078D4;
+}
+
+.progress-indicator {
+  display: flex;
+  margin: 32px 0;
+}
+
+.progress-step {
+  flex: 1;
+  text-align: center;
+  position: relative;
+}
+
+.progress-step::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: calc(50% - 20px);
+  height: 2px;
+  background-color: #ccc;
+}
+
+.progress-step:last-child::after {
+  display: none;
+}
+
+.progress-step.active::after {
+  background-color: #0078D4;
+}
+
+.step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #ccc;
+  color: white;
+  margin-bottom: 8px;
+}
+
+.step-number.active {
+  background-color: #0078D4;
+}
+
+.step-number.completed {
+  background-color: #6CC24A;
+}
+
+.slider-container {
+  display: flex;
+  align-items: center;
+  margin: 20px 0;
+}
+
+.slider-value {
+  margin-left: 16px;
+  min-width: 40px;
+  text-align: right;
+}
+
+.vital-sign-summary {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+}
+
+.vital-sign-item {
+  margin-bottom: 8px;
+}
+
+.vital-sign-progress {
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 4px;
+}
+
+.vital-sign-value {
+  text-align: right;
+  font-weight: 500;
+}
+
+.queue-card {
+  margin-bottom: 16px;
+  border-left: 4px solid #6CC24A;
+}
+
+.high-priority {
+  border-left-color: #d32f2f;
+}
+
+.medium-priority {
+  border-left-color: #f57c00;
+}
+
+.low-priority {
+  border-left-color: #6CC24A;
+}
+
+.patient-status {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.status-waiting {
+  background-color: #e3f2fd;
+  color: #0d47a1;
+}
+
+.status-in-progress {
+  background-color: #fff8e1;
+  color: #ff6f00;
+}
+
+.status-completed {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
