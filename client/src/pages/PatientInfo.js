@@ -216,3 +216,5 @@ function PatientInfo() {
 }
 
 export default PatientInfo;
+// This code defines the PatientInfo component, which collects basic patient information.
+// It includes form validation and navigation to the next step in the check-in process.

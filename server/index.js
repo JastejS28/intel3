@@ -3,168 +3,192 @@ const cors = require('cors');
 const morgan = require('morgan');
 const axios = require('axios');
 const dotenv = require('dotenv');
+const mongoose = require('mongoose');
 
-// Load environment variables
 dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// External API base URL
 const EXTERNAL_API_URL = 'https://queue-assigner.onrender.com';
+
+// --- MongoDB Connection ---
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => console.log('MongoDB connected successfully.'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// --- Patient Schema for storing names ---
+const PatientSchema = new mongoose.Schema({
+  patient_id: { type: String, required: true, unique: true },
+  fullName: { type: String, required: true },
+});
+const Patient = mongoose.model('Patient', PatientSchema);
+
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// GET Queue - Simple proxy to external API
+// Health check
+app.get('/api/health-check', async (req, res) => {
+  try {
+    const response = await axios.get(`${EXTERNAL_API_URL}`);
+    res.json({ status: 'up', externalApiStatus: response.status });
+  } catch (error) {
+    res.status(503).json({ status: 'down', message: 'External API is not responding' });
+  }
+});
+
+// Get queue (just forward it from external API)
 app.get('/api/patients', async (req, res) => {
   try {
-    console.log('Fetching queue from external API');
-    const response = await axios.get('https://queue-assigner.onrender.com/queue/');
-    
-    if (response.data && response.data.queue) {
-      console.log('Queue retrieved with', response.data.queue.length, 'patients');
-      res.json(response.data.queue);
-    } else {
-      console.log('Queue API returned empty or invalid response');
-      res.json([]);
-    }
+    // 1. Fetch the live queue from the external API
+    const queueResponse = await axios.get(`${EXTERNAL_API_URL}/queue/`);
+    const queue = queueResponse.data;
+
+    // 2. Fetch all our patients with names from MongoDB
+    const patientsFromDb = await Patient.find({});
+    const patientNameMap = new Map(patientsFromDb.map(p => [p.patient_id, p.fullName]));
+
+    // 3. Enrich the queue data with names
+    const enrichedQueue = queue.map(patient => ({
+      ...patient,
+      name: patientNameMap.get(patient.patient_id) || 'Anonymous'
+    }));
+
+    res.json(enrichedQueue);
   } catch (error) {
-    console.error('Error fetching queue:', error.message);
+    console.error('Failed to fetch queue:', error);
     res.status(500).json({ message: 'Failed to fetch queue data' });
   }
 });
 
-// POST Patient - Process vital signs and add to queue
+// Submit new patient
 app.post('/api/patients', async (req, res) => {
   try {
-    const patientData = req.body;
-    console.log('Received patient data for:', patientData.fullName);
-    
-    // Debug received data
-    console.log('Vital signs received:', JSON.stringify(patientData.vitalSigns));
-    
-    // Check if vital signs exist
-    if (!patientData.vitalSigns) {
-      throw new Error('Missing vital signs data');
-    }
-    
-    // Convert vital signs data from client format (camelCase) to API format (snake_case)
-    // Also ensure all values are valid numbers with fallbacks
-    const vitalSigns = {
-      heart_rate: Number(patientData.vitalSigns.heartRate || 0),
-      blood_pressure_systolic: Number(patientData.vitalSigns.bloodPressureSystolic || 0),
-      blood_pressure_diastolic: Number(patientData.vitalSigns.bloodPressureDiastolic || 0),
-      temperature: Number(patientData.vitalSigns.temperature || 0),
-      oxygen_saturation: Number(patientData.vitalSigns.oxygenSaturation || 0),
-      respiratory_rate: Number(patientData.vitalSigns.respiratoryRate || 0)
+    const { fullName, age, gender, weight, height, vitalSigns } = req.body;
+
+    const genderMap = { Male: 0, Female: 1 };
+    const genderAsNumber = genderMap[gender] ?? 2;
+
+    const payload = {
+      Heart_Rate: Number(vitalSigns.heartRate),
+      Respiratory_Rate: Number(vitalSigns.respiratoryRate),
+      Body_Temperature: Number(vitalSigns.temperature),
+      Oxygen_Saturation: Number(vitalSigns.oxygenSaturation),
+      Systolic_Blood_Pressure: Number(vitalSigns.bloodPressureSystolic),
+      Diastolic_Blood_Pressure: Number(vitalSigns.bloodPressureDiastolic),
+      Age: Number(age),
+      Gender: genderAsNumber,
+      Weight_kg: Number(weight),
+      Height_m: Number(height),
+      Derived_HRV: 60,
+      Derived_Pulse_Pressure: 40,
+      Derived_BMI: 22.5,
+      Derived_MAP: 88.3
     };
-    
-    // Additional validation - provide reasonable defaults for invalid values
-    if (isNaN(vitalSigns.heart_rate) || vitalSigns.heart_rate <= 0) vitalSigns.heart_rate = 75;
-    if (isNaN(vitalSigns.blood_pressure_systolic) || vitalSigns.blood_pressure_systolic <= 0) vitalSigns.blood_pressure_systolic = 120;
-    if (isNaN(vitalSigns.blood_pressure_diastolic) || vitalSigns.blood_pressure_diastolic <= 0) vitalSigns.blood_pressure_diastolic = 80;
-    if (isNaN(vitalSigns.temperature) || vitalSigns.temperature <= 0) vitalSigns.temperature = 37;
-    if (isNaN(vitalSigns.oxygen_saturation) || vitalSigns.oxygen_saturation <= 0) vitalSigns.oxygen_saturation = 98;
-    if (isNaN(vitalSigns.respiratory_rate) || vitalSigns.respiratory_rate <= 0) vitalSigns.respiratory_rate = 16;
-    
-    console.log('Formatted vital signs for API:', JSON.stringify(vitalSigns));
-    
-    // Step 1: Get priority from /predict endpoint
-    let predictResponse;
-    try {
-      console.log('Sending to predict API...');
-      predictResponse = await axios.post(`${EXTERNAL_API_URL}/predict`, vitalSigns);
-      console.log('Predict API success!');
-    } catch (predictError) {
-      console.error('Predict API error:', predictError.message);
-      if (predictError.response) {
-        console.error('API response data:', JSON.stringify(predictError.response.data));
-        console.error('API response status:', predictError.response.status);
-      } else if (predictError.request) {
-        console.error('No response received');
-      }
-      throw new Error('Failed to predict priority: ' + predictError.message);
-    }
-    
-    // Extract priority information
-    const priorityScore = predictResponse.data.priority_score;
-    const riskLevel = predictResponse.data.risk_level;
-    console.log('Priority assigned:', riskLevel, 'with score:', priorityScore);
-    
-    // Step 2: Add patient to queue
-    const patientId = `patient_${Date.now()}`;
-    const queuePayload = {
-      patient_id: patientId,
-      name: patientData.fullName,
-      age: Number(patientData.age) || 30, // Default age if invalid
-      gender: patientData.gender || 'Unknown',
-      priority_score: priorityScore,
-      vital_signs: vitalSigns,
-      timestamp: new Date().toISOString()
-    };
-    
-    console.log('Sending to queue API...');
-    let queueResponse;
-    try {
-      queueResponse = await axios.post(`${EXTERNAL_API_URL}/queue/`, queuePayload);
-      console.log('Queue API success!');
-    } catch (queueError) {
-      console.error('Queue API error:', queueError.message);
-      if (queueError.response) {
-        console.error('API response data:', JSON.stringify(queueError.response.data));
-        console.error('API response status:', queueError.response.status);
-      }
-      throw new Error('Failed to add to queue: ' + queueError.message);
-    }
-    
-    // Return the complete patient data with queue information
-    res.status(201).json({
-      _id: patientId,
-      patient_id: patientId,
-      name: patientData.fullName,
-      fullName: patientData.fullName,
-      age: Number(patientData.age) || 30,
-      gender: patientData.gender || 'Unknown',
-      priority_score: priorityScore,
-      risk_level: riskLevel,
-      queue_position: queueResponse.data.queue_position,
-      estimated_wait_time: queueResponse.data.estimated_wait_time,
-      timestamp: queueResponse.data.timestamp || new Date().toISOString()
+
+    // 1. Get prediction. This adds the patient to the external queue.
+    const predictResponse = await axios.post(`${EXTERNAL_API_URL}/predict/`, payload, {
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
     });
-    
+
+    // Add a small delay to allow the external API to process the queue
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // 2. Fetch the entire queue and our saved patients
+    const queueResponse = await axios.get(`${EXTERNAL_API_URL}/queue/`);
+    const queue = queueResponse.data;
+    const savedPatients = await Patient.find({}).select('patient_id');
+    const savedPatientIds = new Set(savedPatients.map(p => p.patient_id));
+
+    // 3. Find the new patient in the queue (one that is not already in our DB)
+    const newPatientInQueue = queue.find(p => !savedPatientIds.has(p.patient_id));
+
+    // 4. Now we have the patient_id. Save the name to MongoDB.
+    if (newPatientInQueue && newPatientInQueue.patient_id) {
+      await Patient.create({
+        patient_id: newPatientInQueue.patient_id,
+        fullName: fullName
+      });
+    }
+
+    // 5. Return the full patient data (including the ID) to the client.
+    res.status(201).json(newPatientInQueue || predictResponse.data);
+
   } catch (error) {
-    console.error('Error processing patient:', error.message);
-    res.status(400).json({ 
-      message: error.message,
-      details: 'There was a problem processing your data. Please check your inputs and try again.'
-    });
+    console.error('Failed to submit patient:', error.response ? error.response.data : error.message);
+    res.status(500).json({ message: error.message || 'Failed to submit patient data' });
   }
 });
 
-// Get individual patient status
+// Get individual patient
 app.get('/api/patient/:id', async (req, res) => {
   try {
-    const patientId = req.params.id;
-    const response = await axios.get(`${EXTERNAL_API_URL}/queue/`);
-    
-    if (response.data && response.data.queue) {
-      const patient = response.data.queue.find(p => p.patient_id === patientId);
-      if (patient) {
-        return res.json(patient);
-      }
+    // 1. Fetch the patient's queue data from the external API
+    const queueResponse = await axios.get(`${EXTERNAL_API_URL}/queue/`);
+    let patientQueueData = queueResponse.data.find(p => p.patient_id === req.params.id);
+
+    if (patientQueueData) {
+      // 2. Find the patient's name in our database
+      const patientDb = await Patient.findOne({ patient_id: req.params.id });
+      // 3. Combine the data
+      const enrichedPatient = {
+        ...patientQueueData,
+        name: patientDb ? patientDb.fullName : 'Anonymous'
+      };
+      res.json(enrichedPatient);
+    } else {
+      res.status(404).json({ message: 'Patient not found in queue' });
     }
-    
-    res.status(404).json({ message: 'Patient not found' });
   } catch (error) {
-    console.error('Error fetching patient:', error.message);
+    console.error('Failed to get patient:', error);
     res.status(500).json({ message: error.message });
   }
 });
 
+// Call next patient
+app.post('/api/queue/next', async (req, res) => {
+  try {
+    // 1. Call the external API to get the next patient and remove them from the queue.
+    const response = await axios.get(`${EXTERNAL_API_URL}/queue/next/`);
+    const calledPatientData = response.data;
+
+    if (calledPatientData && calledPatientData.patient_id) {
+      // 2. Find the patient's name in our database using their ID.
+      const patientDb = await Patient.findOne({ patient_id: calledPatientData.patient_id });
+
+      // 3. Enrich the data with the name before sending it back.
+      calledPatientData.name = patientDb ? patientDb.fullName : 'Anonymous';
+
+      // 4. Delete the patient's record from our MongoDB database.
+      await Patient.deleteOne({ patient_id: calledPatientData.patient_id });
+    }
+    
+    res.json({ message: 'Next patient called successfully', calledPatient: calledPatientData });
+  } catch (error) {
+    const message = error.response?.data?.message || 'Failed to call next patient';
+    res.status(error.response?.status || 500).json({ message });
+  }
+});
+
+// --- Function to periodically update priorities to prevent starvation ---
+const updatePatientPriorities = async () => {
+  try {
+    // We use POST as this action changes the state on the server.
+    await axios.post(`${EXTERNAL_API_URL}/queue/update-priorities/`);
+    console.log('Successfully triggered priority update for waiting patients.');
+  } catch (error) {
+    console.error('Failed to trigger priority update:', error.response?.data?.message || error.message);
+  }
+};
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  
+  // Run the priority update function every 5 minutes (300,000 milliseconds)
+  setInterval(updatePatientPriorities, 300000);
 });

@@ -7,7 +7,8 @@ import CssBaseline from '@mui/material/CssBaseline';
 import Home from './pages/Home';
 import PatientInfo from './pages/PatientInfo';
 import VitalSigns from './pages/VitalSigns';
-import QueueStatus from './pages/QueueStatus';
+import QueueStatus from './pages/QueueStat';
+import Admin from './pages/Admin'; // 1. Import the new Admin component
 
 // Theme
 const theme = createTheme({
@@ -72,6 +73,7 @@ function App() {
           <Route path="/patient-info" element={<PatientInfo />} />
           <Route path="/vital-signs" element={<VitalSigns />} />
           <Route path="/queue-status" element={<QueueStatus />} />
+          <Route path="/admin" element={<Admin />} /> {/* 2. Add the new route */}
         </Routes>
       </Router>
     </ThemeProvider>

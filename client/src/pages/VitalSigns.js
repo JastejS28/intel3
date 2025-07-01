@@ -14,6 +14,8 @@ import {
 } from '@mui/material';
 import Header from '../components/Header';
 import ProgressIndicator from '../components/ProgressIndicator';
+import axios from 'axios';
+import config from '../config';
 
 function VitalSigns() {
   const navigate = useNavigate();
@@ -88,20 +90,34 @@ function VitalSigns() {
     navigate('/patient-info');
   };
   
-  const handleSubmit = () => {
-    // Combine patient info with vital signs
-    const completePatientData = {
-      ...patientInfo,
-      vitalSigns
-    };
-    
-    // Store complete data
-    sessionStorage.setItem('completePatientData', JSON.stringify(completePatientData));
-    
-    // Submit data to backend API and move to queue status page
-    navigate('/queue-status');
+  const handleSubmit = async () => {
+    try {
+      const response = await axios.post(`${config.apiUrl}/patients`, {
+        ...patientInfo,
+        vitalSigns
+      });
+      
+      const patientResult = response.data;
+
+      if (patientResult && patientResult.patient_id) {
+        // Store data in sessionStorage to survive a refresh
+        sessionStorage.setItem('patientData', JSON.stringify({
+          patientId: patientResult.patient_id,
+          fullName: patientInfo.fullName
+        }));
+        sessionStorage.setItem('patientSubmitted', 'true');
+
+        // Navigate to the queue status page
+        navigate('/queue-status');
+      } else {
+        console.error('Submission successful, but no patient_id was returned from the server.');
+        // Optionally, show an error message to the user here
+      }
+    } catch (error) {
+      console.error('Failed to submit patient data:', error);
+    }
   };
-  
+
   if (!patientInfo) {
     return <Typography>Loading...</Typography>;
   }
